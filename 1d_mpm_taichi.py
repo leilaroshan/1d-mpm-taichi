@@ -14,7 +14,6 @@ nelements  = 1               # number of elements
 nparticles = 1               # number of particles
 el_length  = L / nelements   # element length
 
-
 # Initial conditions
 v0    = 0.1                 # initial velocity
 x_loc = 0.5                 # location to get analytical solution
@@ -77,7 +76,6 @@ def initialize():
 
 @ti.kernel
 def compute_N():   #range = nsteps
-    
     for _ in range(nsteps):
     # shape function and derivative
         N[None][0]  = 1 - abs(x_p[None] - nodes[0][0]) / L
@@ -116,7 +114,7 @@ def total_force():
 # Updating 
 @ti.kernel
 def update_particle():
-    for k in range(1): #nsteps):
+    for k in range(nsteps):
         # update nodal momentum
         mv_n[None] += f_total_n[None] * dt
         # update particle position and velocity
