@@ -9,6 +9,7 @@ ti.init(arch=ti.cpu)
 L = 1                        # domain size
 nodes      = ti.Vector.field(2, dtype=ti.f32, shape=L)
 nodes[0]   = [0, 1]
+nnodes=2                     # len (nodes)=2
 nelements  = 1               # number of elements
 nparticles = 1               # number of particles
 el_length  = L / nelements   # element length
@@ -22,68 +23,63 @@ x_loc = 0.5                 # location to get analytical solution
 E   = 4 * (np.pi)**2        # Young's modulus
 rho = 1.0                   # Density
 
-# Material points
-x_p        = 0.5 * el_length         # position
-# mass_p     = 1.0                     # mass
-# vol_p      = el_length / nparticles  # volume
-# vel_p      = v0                      # velocity
-# stress_p   = 0.0                     # stress
-# strain_p   = 0.0                     # strain
-# mv_p       = mass_p * vel_p          # momentum = m * v
-
 # Material points as scalar value
-#x_p = ti.field(ti.f32, shape=())
-mass_p = ti.field(dtype=ti.f32, shape=nparticles)
-vol_p = ti.field(dtype=ti.f32, shape=nparticles)
-vel_p = ti.field(dtype=ti.f32, shape=nparticles)
-stress_p = ti.field(dtype=ti.f32, shape=nparticles)
-strain_p = ti.field(dtype=ti.f32, shape=nparticles)
-mv_p = ti.field(dtype=ti.f32, shape=nparticles)
+x_p = ti.field(ti.f32, shape=())
+mass_p = ti.field(dtype=ti.f32, shape=())
+vol_p = ti.field(dtype=ti.f32, shape=())
+vel_p = ti.field(dtype=ti.f32, shape=())
+stress_p = ti.field(dtype=ti.f32, shape=())
+strain_p = ti.field(dtype=ti.f32, shape=())
+mv_p = ti.field(dtype=ti.f32, shape=())
 
 # Time
 duration = 10
 dt       = 0.01
 time     = 0
 # nsteps   = int(duration/dt)
-nsteps  = ti.field(dtype=ti.i32, shape=())    # scalar value for nstep
-nsteps[None] = int(duration / dt)
-
+nsteps  = int(duration / dt)    # scalar value for nstep
 
 # Store time, velocity, and position with time
-#time_t, vel_t, x_t, se_t, ke_t, te_t = [], [], [], [], [], []
-
-time_t = ti.field(ti.f32, shape=nelements)
-vel_t = ti.field(ti.f32, shape=())
-x_t = ti.field(ti.f32, shape=())
-se_t = ti.field(ti.f32, shape=())
-ke_t = ti.field(ti.f32, shape=())
-te_t = ti.field(ti.f32, shape=())
+time_t = ti.field(ti.f32, shape=nsteps)
+vel_t = ti.field(ti.f32, shape=nsteps)
+x_t = ti.field(ti.f32, shape=nsteps)
+se_t = ti.field(ti.f32, shape=nsteps)
+ke_t = ti.field(ti.f32, shape=nsteps)
+te_t = ti.field(ti.f32, shape=nsteps)
 
 # shape function and derivative
 N = ti.Vector.field(2, dtype=ti.f32 , shape=())
 dN = ti.Vector.field(2, dtype=ti.f32, shape=())
 
-# mass_n = ti.field(dtype=ti.f32, shape=nnodes)
-# mv_n = ti.field(dtype=ti.f32, shape=nnodes)
+mass_n = ti.field(dtype=ti.f32, shape=nnodes)
+mv_n = ti.field(dtype=ti.f32, shape=nnodes)
+
+# Initialize Taichi tensors
+@ti.kernel
+def initialize():
+    x_p[None] = 0.5 * el_length
+    mass_p[None] = 1.0
+    vol_p[None] = el_length / nparticles
+    vel_p[None] = v0
+    stress_p[None] = 0.0
+    strain_p[None] = 0.0
+    mv_p[None] = mass_p[None] * vel_p[None]
+
+# Time-stepping loop
+for _ in range(nsteps):
+    initialize()
 
 @ti.kernel
-def compute_N():
-    for _ in range(nsteps):
+def compute_N():   #range = nsteps
+    for i in range(2):
         # shape function and derivative
-        N[0]  = 1 - abs(x_p[None] - nodes[0][0]) / L
-        N[1]  = 1 - abs(x_p[None] - nodes[0][1]) / L
-        dN[0] = -1 / L
-        dN[1] = 1 / L
-        print (N)
+        N[None][0]  = 1 - abs(x_p[None] - nodes[0][0]) / L
+        N[None][1]  = 1 - abs(x_p[None] - nodes[0][1]) / L
+        dN[None][0] = -1 / L
+        dN[None][1] = 1 / L
+        print(N[None])
         # map particle mass and momentum to nodes
-        mass_n = N * mass_p
-        mv_n   = N * mv_p
+        mass_n[None][0] = N[0] * mass_p[None]
+        # mv_n[0]   = N[None] * mv_p[0]
 
-
-
-
-
-
-
-
-
+compute_N()
