@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "1d-taichi-mpm"
+version = "0.1.0"
+description = ""
+authors = ["leila <leila@utexas.edu>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.12"
+taichi = "^1.6.0"
+numpy = "^1.25.2"
+matplotlib = "^3.7.3"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

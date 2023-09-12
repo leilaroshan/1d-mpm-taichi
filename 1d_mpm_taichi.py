@@ -118,7 +118,6 @@ def update_particle():
         # update nodal momentum
         mv_n[None] += f_total_n[None] * dt
         # update particle position and velocity
-
         for i in range(nnodes):
             vel_p[None] += dt * N[None][i] * f_total_n[None][i] / mass_n[None][i]
             x_p[None]   += dt * N[None][i] * mv_n[None][i] / mass_n[None][i]
@@ -142,12 +141,13 @@ def update_particle():
         # vel_t.append(vel_p)
         # x_t.append(x_p)
 
+for _ in range(nsteps):
+    initialize()
+    compute_N()
+    compute_mass_and_momentum () 
+    internal_and_external_force()
+    total_force()
+    update_particle()
 
-initialize()
-compute_N()
-compute_mass_and_momentum () 
-internal_and_external_force()
-total_force()
-update_particle()
 print(stress_p)
 
