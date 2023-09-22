@@ -14,10 +14,8 @@ nelements  = 1               # number of elements
 nparticles = 1               # number of particles
 el_length  = L / nelements   # element length
 
-
 # Initial conditions
 v0    = 0.1                 # initial velocity
-x_loc = 0.5                 # location to get analytical solution
 
 # Material property
 E   = 4 * (np.pi)**2        # Young's modulus
@@ -64,7 +62,7 @@ f_int_n   = ti.Vector.field(2, dtype=ti.f32, shape=())
 f_total_n = ti.Vector.field(2, dtype=ti.f32, shape=())
 
 # Initialize Taichi tensors
-@ti.kernel
+@ti.func
 def initialize():
     x_p[None]      = 0.5 * el_length
     mass_p[None]   = rho*L 
@@ -75,81 +73,80 @@ def initialize():
     mv_p[None]     = mass_p[None] * vel_p[None]
     f_ext_n[None]  = [0, 0] 
 
-@ti.kernel
-def compute_N():   #range = nsteps
-    
-    for _ in range(nsteps):
+@ti.func
+def compute_N():   # range = nsteps
     # shape function and derivative
-        N[None][0]  = 1 - abs(x_p[None] - nodes[0][0]) / L
-        N[None][1]  = 1 - abs(x_p[None] - nodes[0][1]) / L
-        dN[None][0] = -1 / L
-        dN[None][1] = 1 / L
+    N[None][0]  = 1 - abs(x_p[None] - nodes[0][0]) / L
+    N[None][1]  = 1 - abs(x_p[None] - nodes[0][1]) / L
+    dN[None][0] = -1 / L
+    dN[None][1] = 1 / L
 
-
-@ti.kernel
+@ti.func
 def compute_mass_and_momentum():
-    for _ in range(nsteps):
-        # map particle mass and momentum to nodes 
-        mass_n[None] = N[None][0] * mass_p[None]   # Mapped mass at the nodes: [0.5 0.5]
-        mv_n[None] = N[None][0] * mv_p[None]       # Momentum at nodes: [0.05 0.05]
-        # apply boundary condition: velocity at left node is zero
-        mv_n[None][0] = 0.0   
+    # map particle mass and momentum to nodes 
+    mass_n[None] = N[None] * mass_p[None]   # Mapped mass at the nodes: [0.5 0.5]
+    mv_n[None] = N[None] * mv_p[None]       # Momentum at nodes: [0.05 0.05]
+    # apply boundary condition: velocity at left node is zero
+    mv_n[None][0] = 0.0   
 
 
-@ti.kernel
+@ti.func
 def internal_and_external_force():
-    for _ in range(nsteps):
-        f_int_n[None] = - dN[None] * vol_p[None] * stress_p[None]
-        f_ext_n[None] = [0, 0]
+    f_int_n[None] = - dN[None] * vol_p[None] * stress_p[None]
+    f_ext_n[None] = [0, 0]
 
 
 #Calculate the total unbalanced nodal forces
-# total forces at nodes
-@ti.kernel
+@ti.func
 def total_force():
-    for _ in range(nsteps):
-        f_total_n[None] = f_int_n[None] + f_ext_n[None]
-        # apply boundary condition: left node has no acceleration (f = m * a, and a = 0)
-        f_total_n[None][0] = 0.0
-
-
+    f_total_n[None] = f_int_n[None] + f_ext_n[None]
+    # apply boundary condition: left node has no acceleration (f = m * a, and a = 0)
+    f_total_n[None][0] = 0.0
+    # update nodal momentum
+    mv_n[None] += f_total_n[None] * dt
+####################################################################
 # Updating 
-@ti.kernel
+@ti.func
 def update_particle():
-    for k in range(1): #nsteps):
-        # update nodal momentum
-        mv_n[None] += f_total_n[None] * dt
-        # update particle position and velocity
+    # update particle position and velocity 
+    for i in range(nnodes):
+         vel_p[None] += dt * N[None][i] * f_total_n[None][i] / mass_n[None][i]
+         x_p[None]   += dt * N[None][i] * mv_n[None][i] / mass_n[None][i]
+    # update particle momentum
+    mv_p[None] = mass_p[None] * vel_p[None]
+    # update map nodal velocity
+    vel_n[None] = mass_p[None] * vel_p[None] * (N[None]/ mass_n[None])
+    # Apply boundary condition and set left nodal velocity to zero
+    vel_n[None][0] = 0
+    
+    # Compute strains and stresses
+    strain_rate_p[None] = dN[None][0] * vel_n[None][0] + dN[None][1] * vel_n[None][1]
+    # compute strain increament 
+    dstrain_p[None]  = strain_rate_p[None] * dt
+    strain_p[None]  += dstrain_p[None]
+    # compute stress
+    stress_p[None] += E * dstrain_p[None]
 
-        for i in range(nnodes):
-            vel_p[None] += dt * N[None][i] * f_total_n[None][i] / mass_n[None][i]
-            x_p[None]   += dt * N[None][i] * mv_n[None][i] / mass_n[None][i]
-        # update particle momentum
-        mv_p[None] = mass_p[None] * vel_p[None]
-        # update map nodal velocity
-        vel_n[None] = mass_p[None] * vel_p[None] * ((N[None]/ mass_n[None]))
-        # Apply boundary condition and set left nodal velocity to zero
-        vel_n[None][0] = 0
-
-        # Compute strains and stresses
-        strain_rate_p[None] = dN[None][0] * vel_n[None][0] + dN[None][1] * vel_n[None][1]
-        # compute strain increament 
-        dstrain_p[None] = strain_rate_p[None] * dt
-        strain_p[None]  += dstrain_p[None]
-        # compute stress
-        stress_p[None] += E * dstrain_p[None]
-        
-        # How to store properties for plotting
+@ti.kernel
+def mpm():
+    initialize()
+    for k in range(nsteps):
+        compute_N()
+        compute_mass_and_momentum() 
+        internal_and_external_force()
+        total_force()
+        update_particle()
+            
         time_t[k] = dt * k
-        # vel_t.append(vel_p)
-        # x_t.append(x_p)
+        vel_t[k]  = vel_p[None]
+        x_t[k]    = x_p[None]
 
+mpm()
+print(vel_p)
 
-initialize()
-compute_N()
-compute_mass_and_momentum () 
-internal_and_external_force()
-total_force()
-update_particle()
-print(stress_p)
-
+plt.plot(time_t, vel_t, 'ob', markersize = 2, label='mpm')
+plt.xlabel('time (s)')
+plt.ylabel('velocity (m/s)')
+plt.legend()
+#plt.show()
+plt.savefig('tv.png')
