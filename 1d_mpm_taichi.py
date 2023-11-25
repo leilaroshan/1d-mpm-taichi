@@ -130,6 +130,7 @@ def update_particle():
 @ti.kernel
 def mpm():
     initialize()
+    ti.loop_config(serialize=True)
     for k in range(nsteps):
         compute_N()
         compute_mass_and_momentum() 
